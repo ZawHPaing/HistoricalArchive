@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Register</title>
+</head>
+<body>
+    <h1>Register Page</h1>
+
+    <form action="/register" method="post">
+    <label>Username:
+        <input type="text" id="username" name="username" onblur="checkUsername()" required />
+    </label>
+    <span id="usn-check"></span><br>
+
+    <label>Email:
+        <input type="email" id="email" name="email" onblur="checkEmail()" required />
+    </label>
+    <span id="email-check"></span><br>
+
+    <label>Password:
+        <input type="password" name="password" required />
+    </label><br>
+
+    <button type="submit" id="register-btn" disabled>Register</button>
+</form>
+
+
+    <p th:if="${error}" th:text="${error}" style="color:red;"></p>
+    <p th:if="${success}" th:text="${success}" style="color:green;"></p>
+</body>
+
+
+<script>
+    let isUsernameValid = false;
+    let isEmailValid = false;
+
+    function checkUsername() {
+        const username = document.getElementById("username").value;
+        fetch(`/check-username?username=${encodeURIComponent(username)}`)
+            .then(res => res.json())
+            .then(isTaken => {
+                const msg = document.getElementById("usn-check");
+                if (isTaken) {
+                    msg.textContent = "❌ Username already taken.";
+                    msg.style.color = "red";
+                    isUsernameValid = false;
+                } else {
+                    msg.textContent = "✅ Username available.";
+                    msg.style.color = "green";
+                    isUsernameValid = true;
+                }
+                toggleSubmit();
+            });
+    }
+
+    function checkEmail() {
+        const email = document.getElementById("email").value;
+        fetch(`/check-email?email=${encodeURIComponent(email)}`)
+            .then(res => res.json())
+            .then(isTaken => {
+                const msg = document.getElementById("email-check");
+                if (isTaken) {
+                    msg.textContent = "❌ Email already registered.";
+                    msg.style.color = "red";
+                    isEmailValid = false;
+                } else {
+                    msg.textContent = "✅ Email available.";
+                    msg.style.color = "green";
+                    isEmailValid = true;
+                }
+                toggleSubmit();
+            });
+    }
+
+    function toggleSubmit() {
+        const submitBtn = document.getElementById("register-btn");
+        submitBtn.disabled = !(isUsernameValid && isEmailValid);
+    }
+</script>
+
+
+</html>
