@@ -34,6 +34,10 @@
             font-size: 80px;
             color: #6c757d;
         }
+        .error-message {
+            color: #dc3545;
+            font-size: 0.875em;
+        }
     </style>
 </head>
 <body>
@@ -43,6 +47,9 @@
             <h2 class="text-center">Edit Profile</h2>
         </div>
         <div class="card-body">
+            <!-- Error Message Display -->
+            <div th:if="${error != null}" class="alert alert-danger" th:text="${error}"></div>
+            
             <form th:action="@{/profile/{userId}/edit(userId=${user.userId})}" 
                   method="post" enctype="multipart/form-data" onsubmit="return validateForm()">
                 
@@ -71,19 +78,24 @@
                 </div>
                 
                 <div class="mb-3">
-                    <label for="email" class="form-label">Email</label>
-                    <input type="email" class="form-control" id="email" 
-                           th:value="${user.email}" name="email" required>
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" 
+                           th:value="${user.username}" name="username" required
+                           oninput="checkUsernameAvailability(this.value)">
+                    <div id="usernameError" class="error-message"></div>
                 </div>
                 
                 <div class="mb-3">
-                    <label for="newPassword" class="form-label">New Password (leave blank to keep current)</label>
-                    <input type="password" class="form-control" id="newPassword" 
-                           name="newPassword">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="email" 
+                           th:value="${user.email}" name="email" required
+                           th:data-current-email="${user.email}"
+                           oninput="checkEmailAvailability(this.value)">
+                    <div id="emailError" class="error-message"></div>
                 </div>
                 
                 <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Save Changes</button>
                     <a th:href="@{/profile/{userId}(userId=${user.userId})}" 
                        class="btn btn-secondary">Cancel</a>
                 </div>
@@ -113,8 +125,88 @@
         }
     }
 
+    function checkUsernameAvailability(username) {
+        const usernameError = document.getElementById('usernameError');
+        const submitBtn = document.getElementById('submitBtn');
+        const currentUsername = '[[${user.username}]]'; // Get current username from Thymeleaf
+        
+        if (username.trim().length === 0) {
+            usernameError.textContent = 'Username is required';
+            submitBtn.disabled = true;
+            return;
+        }
+        
+        // If username matches current username, it's always valid
+        if (username === currentUsername) {
+            usernameError.textContent = '';
+            submitBtn.disabled = false;
+            return;
+        }
+        
+        fetch(`/check-username?username=${encodeURIComponent(username)}`)
+            .then(response => response.json())
+            .then(isTaken => {
+                if (isTaken) {
+                    usernameError.textContent = 'Username is already taken';
+                    submitBtn.disabled = true;
+                } else {
+                    usernameError.textContent = '';
+                    submitBtn.disabled = false;
+                }
+            });
+    }
+
+    function checkEmailAvailability(email) {
+        const emailError = document.getElementById('emailError');
+        const submitBtn = document.getElementById('submitBtn');
+        const currentEmail = document.getElementById('email').dataset.currentEmail;
+        
+        if (email.trim().length === 0) {
+            emailError.textContent = 'Email is required';
+            submitBtn.disabled = true;
+            return;
+        }
+        
+        // Simple email format validation
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            emailError.textContent = 'Please enter a valid email address';
+            submitBtn.disabled = true;
+            return;
+        }
+        
+        // Skip duplicate check if email hasn't changed
+        if (email === currentEmail) {
+            emailError.textContent = '';
+            submitBtn.disabled = false;
+            return;
+        }
+        
+        // Only check for duplicates if email is different from current one
+        fetch(`/check-email?email=${encodeURIComponent(email)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(isTaken => {
+                if (isTaken) {
+                    emailError.textContent = 'Email is already registered';
+                    submitBtn.disabled = true;
+                } else {
+                    emailError.textContent = '';
+                    submitBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error checking email availability:', error);
+                emailError.textContent = 'Error checking email availability';
+                submitBtn.disabled = true;
+            });
+    }
+
     function validateForm() {
-        // Add your validation logic here
+        // Additional validation if needed
         return true;
     }
 </script>

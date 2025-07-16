@@ -132,7 +132,7 @@ public class UserController {
 
 
 
-    //Rest
+   
 
 @GetMapping("/check-username")
 @ResponseBody
@@ -158,21 +158,22 @@ public String showUserProfile(@PathVariable Integer userId, Model model) {
 }
 
 //Edit profile form
+//Edit profile form
 @GetMapping("/profile/{userId}/edit")
 public String showEditProfileForm(@PathVariable Integer userId, Model model, HttpSession session) {
-    // Check if logged in user matches the requested profile
-    User loggedInUser = (User) session.getAttribute("loggedInUser");
-    if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
-        return "redirect:/login";
-    }
+ // Check if logged in user matches the requested profile
+ User loggedInUser = (User) session.getAttribute("loggedInUser");
+ if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
+     return "redirect:/login";
+ }
 
-    User user = userRepository.findByUserId(userId);
-    if (user == null) {
-        return "error";
-    }
-    
-    model.addAttribute("user", user);
-    return "nonReact/editProfile";
+ User user = userRepository.findByUserId(userId);
+ if (user == null) {
+     return "error";
+ }
+ 
+ model.addAttribute("user", user);
+ return "nonReact/editProfile";
 }
 
 //Update profile
@@ -183,8 +184,7 @@ public String updateProfile(
         @RequestParam(value = "newPassword", required = false) String newPassword,
         @RequestParam(value = "profileImage", required = false) MultipartFile imgFile,
         HttpSession session, Model model) throws IOException {
-    
-    // Authentication check
+
     User loggedInUser = (User) session.getAttribute("loggedInUser");
     if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
         return "redirect:/login";
@@ -195,17 +195,37 @@ public String updateProfile(
         return "error";
     }
 
-    // Update basic info
-    existingUser.setEmail(updatedUser.getEmail().trim().toLowerCase());
-    
-    // Update password if provided
-    if (newPassword != null && !newPassword.trim().isEmpty()) {
+    String newUsername = updatedUser.getUsername().trim();
+    String newEmail = updatedUser.getEmail().trim().toLowerCase();
+
+    // Check uniqueness
+    User userByUsername = userRepository.findByUsername(newUsername);
+    if (userByUsername != null && !userByUsername.getUserId().equals(userId)) {
+        model.addAttribute("error", "Username already taken.");
+        model.addAttribute("user", existingUser);
+        return "nonReact/editProfile";
+    }
+
+    User userByEmail = userRepository.findByEmail(newEmail);
+    if (userByEmail != null && !userByEmail.getUserId().equals(userId)) {
+        model.addAttribute("error", "Email already registered.");
+        model.addAttribute("user", existingUser);
+        return "nonReact/editProfile";
+    }
+
+    // Update basic fields
+    existingUser.setUsername(newUsername);
+    existingUser.setEmail(newEmail);
+    existingUser.setModifiedAt(LocalDateTime.now());
+
+    // Handle password update if provided
+    if (newPassword != null && !newPassword.isEmpty()) {
         String hashedPassword = org.springframework.security.crypto.bcrypt.BCrypt
             .hashpw(newPassword, org.springframework.security.crypto.bcrypt.BCrypt.gensalt());
         existingUser.setPassword(hashedPassword);
     }
 
-    // Handle Profile Image Upload if a new image is provided
+    // Handle profile image upload
     if (imgFile != null && !imgFile.isEmpty()) {
         try {
             // Generate unique filename
@@ -232,7 +252,6 @@ public String updateProfile(
         }
     }
 
-    existingUser.setModifiedAt(LocalDateTime.now());
     userRepository.save(existingUser);
     
     // Update session with latest user data
@@ -240,8 +259,7 @@ public String updateProfile(
     
     return "redirect:/profile/" + userId;
 }
+
+
+
 }
-
-    
-    
-
