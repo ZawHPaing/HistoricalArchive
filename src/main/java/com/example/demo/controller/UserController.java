@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ProfileDTO;
 import com.example.demo.entity.User;
 import com.example.demo.entity.UserRole;
 import com.example.demo.repository.UserRepository;
@@ -9,7 +10,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 
 @Controller
@@ -140,6 +146,80 @@ public boolean checkEmail(@RequestParam("email") String email) {
     return userRepository.existsByEmail(email);
 }
 
-    
-    
+@GetMapping("/profile/{userId}")
+public String showUserProfile(@PathVariable Integer userId, Model model) {
+    User user = userRepository.findByUserId(userId);
+    if (user == null) {
+        // Handle case when user is not found
+        return "error"; // You should create an error.html page
+    }
+    model.addAttribute("user", user);
+    return "nonReact/profile";
 }
+
+//Edit profile form
+@GetMapping("/profile/{userId}/edit")
+public String showEditProfileForm(@PathVariable Integer userId, Model model) {
+    User user = userRepository.findByUserId(userId);
+    if (user == null) {
+        return "error";
+    }
+    
+    ProfileDTO profileDTO = new ProfileDTO();
+    profileDTO.setUserId(user.getUserId());
+    profileDTO.setEmail(user.getEmail());
+    profileDTO.setProfilePath(user.getProfilePath());
+    
+    model.addAttribute("profileDTO", profileDTO);
+    return "nonReact/editProfile";
+}
+
+// Update profile
+@PostMapping("/profile/{userId}/edit")
+public String updateProfile(
+        @PathVariable Integer userId,
+        @ModelAttribute("profileDTO") ProfileDTO profileDTO,
+        @RequestParam("profileImage") MultipartFile file) {
+    
+    User user = userRepository.findByUserId(userId);
+    if (user == null) {
+        return "error";
+    }
+
+    // Handle profile image upload
+    if (!file.isEmpty()) {
+        try {
+            String uploadDir = "uploads/";
+            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+            Path uploadPath = Paths.get(uploadDir);
+            
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+            
+            Path filePath = uploadPath.resolve(fileName);
+            file.transferTo(filePath.toFile());
+            profileDTO.setProfilePath("/" + uploadDir + fileName);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Update user details
+    user.setEmail(profileDTO.getEmail());
+    if (profileDTO.getPassword() != null && !profileDTO.getPassword().isEmpty()) {
+        user.setPassword(profileDTO.getPassword());
+    }
+    if (profileDTO.getProfilePath() != null) {
+        user.setProfilePath(profileDTO.getProfilePath());
+    }
+    user.setModifiedAt(LocalDateTime.now());
+    
+    userRepository.save(user);
+    return "redirect:/profile/" + userId;
+}
+}
+
+    
+    
+
