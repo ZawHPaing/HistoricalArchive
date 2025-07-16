@@ -16,7 +16,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Controller
 public class UserController {
@@ -159,63 +161,85 @@ public String showUserProfile(@PathVariable Integer userId, Model model) {
 
 //Edit profile form
 @GetMapping("/profile/{userId}/edit")
-public String showEditProfileForm(@PathVariable Integer userId, Model model) {
+public String showEditProfileForm(@PathVariable Integer userId, Model model, HttpSession session) {
+    // Check if logged in user matches the requested profile
+    User loggedInUser = (User) session.getAttribute("loggedInUser");
+    if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
+        return "redirect:/login";
+    }
+
     User user = userRepository.findByUserId(userId);
     if (user == null) {
         return "error";
     }
     
-    ProfileDTO profileDTO = new ProfileDTO();
-    profileDTO.setUserId(user.getUserId());
-    profileDTO.setEmail(user.getEmail());
-    profileDTO.setProfilePath(user.getProfilePath());
-    
-    model.addAttribute("profileDTO", profileDTO);
+    model.addAttribute("user", user);
     return "nonReact/editProfile";
 }
 
-// Update profile
+//Update profile
 @PostMapping("/profile/{userId}/edit")
 public String updateProfile(
         @PathVariable Integer userId,
-        @ModelAttribute("profileDTO") ProfileDTO profileDTO,
-        @RequestParam("profileImage") MultipartFile file) {
+        @ModelAttribute("user") User updatedUser,
+        @RequestParam(value = "newPassword", required = false) String newPassword,
+        @RequestParam(value = "profileImage", required = false) MultipartFile imgFile,
+        HttpSession session, Model model) throws IOException {
     
-    User user = userRepository.findByUserId(userId);
-    if (user == null) {
+    // Authentication check
+    User loggedInUser = (User) session.getAttribute("loggedInUser");
+    if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
+        return "redirect:/login";
+    }
+
+    User existingUser = userRepository.findByUserId(userId);
+    if (existingUser == null) {
         return "error";
     }
 
-    // Handle profile image upload
-    if (!file.isEmpty()) {
+    // Update basic info
+    existingUser.setEmail(updatedUser.getEmail().trim().toLowerCase());
+    
+    // Update password if provided
+    if (newPassword != null && !newPassword.trim().isEmpty()) {
+        String hashedPassword = org.springframework.security.crypto.bcrypt.BCrypt
+            .hashpw(newPassword, org.springframework.security.crypto.bcrypt.BCrypt.gensalt());
+        existingUser.setPassword(hashedPassword);
+    }
+
+    // Handle Profile Image Upload if a new image is provided
+    if (imgFile != null && !imgFile.isEmpty()) {
         try {
-            String uploadDir = "uploads/";
-            String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
-            Path uploadPath = Paths.get(uploadDir);
+            // Generate unique filename
+            String fileName = UUID.randomUUID().toString() + "_" + imgFile.getOriginalFilename();
             
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
+            // Create upload directory if it doesn't exist
+            Path uploadDir = Paths.get("uploads/users/");
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
             }
+
+            // Save file to server
+            Path filePath = uploadDir.resolve(fileName);
+            Files.copy(imgFile.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
             
-            Path filePath = uploadPath.resolve(fileName);
-            file.transferTo(filePath.toFile());
-            profileDTO.setProfilePath("/" + uploadDir + fileName);
+            // Store relative path in database
+            String relativePath = "/uploads/users/" + fileName;
+            existingUser.setProfilePath(relativePath);
+            
         } catch (IOException e) {
             e.printStackTrace();
+            model.addAttribute("error", "Failed to upload profile image");
+            return "nonReact/editProfile";
         }
     }
 
-    // Update user details
-    user.setEmail(profileDTO.getEmail());
-    if (profileDTO.getPassword() != null && !profileDTO.getPassword().isEmpty()) {
-        user.setPassword(profileDTO.getPassword());
-    }
-    if (profileDTO.getProfilePath() != null) {
-        user.setProfilePath(profileDTO.getProfilePath());
-    }
-    user.setModifiedAt(LocalDateTime.now());
+    existingUser.setModifiedAt(LocalDateTime.now());
+    userRepository.save(existingUser);
     
-    userRepository.save(user);
+    // Update session with latest user data
+    session.setAttribute("loggedInUser", existingUser);
+    
     return "redirect:/profile/" + userId;
 }
 }
