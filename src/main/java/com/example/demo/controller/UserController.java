@@ -5,6 +5,7 @@ import com.example.demo.repository.UserRepository;
 
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -258,6 +259,66 @@ public String updateProfile(
     session.setAttribute("loggedInUser", existingUser);
     
     return "redirect:/profile/" + userId;
+}
+
+@GetMapping("/profile/{userId}/change-password")
+public String showChangePasswordForm(@PathVariable Integer userId, Model model, HttpSession session) {
+    User loggedInUser = (User) session.getAttribute("loggedInUser");
+    if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
+        return "redirect:/login";
+    }
+
+    model.addAttribute("user", loggedInUser);
+    return "nonReact/changePassword";
+}
+
+@PostMapping("/profile/{userId}/change-password")
+public String processChangePassword(
+        @PathVariable Integer userId,
+        @RequestParam("oldPassword") String oldPassword,
+        @RequestParam("newPassword") String newPassword,
+        @RequestParam("confirmPassword") String confirmPassword,
+        HttpSession session,
+        Model model) {
+
+    User loggedInUser = (User) session.getAttribute("loggedInUser");
+    if (loggedInUser == null || !loggedInUser.getUserId().equals(userId)) {
+        return "redirect:/login";
+    }
+
+    // Verify old password
+    if (!BCrypt.checkpw(oldPassword, loggedInUser.getPassword())) {
+        model.addAttribute("error", "Current password is incorrect.");
+        model.addAttribute("user", loggedInUser);
+        return "nonReact/changePassword";
+    }
+
+    // Check if new password matches confirmation
+    if (!newPassword.equals(confirmPassword)) {
+        model.addAttribute("error", "New password and confirmation password do not match.");
+        model.addAttribute("user", loggedInUser);
+        return "nonReact/changePassword";
+    }
+
+    // Check password length
+    if (newPassword.length() < 3) {
+        model.addAttribute("error", "Password must be at least 3 characters long.");
+        model.addAttribute("user", loggedInUser);
+        return "nonReact/changePassword";
+    }
+
+    // Update password
+    String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+    loggedInUser.setPassword(hashedPassword);
+    loggedInUser.setModifiedAt(LocalDateTime.now());
+    userRepository.save(loggedInUser);
+
+    // Update session
+    session.setAttribute("loggedInUser", loggedInUser);
+
+    model.addAttribute("success", "Password changed successfully.");
+    model.addAttribute("user", loggedInUser);
+    return "nonReact/changePassword";
 }
 
 
